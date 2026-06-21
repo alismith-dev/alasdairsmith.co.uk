@@ -1,6 +1,7 @@
 ---
 title: Becoming grid aware
-draft: true
+publishedDate: 2026-06-21
+excerpt: A deep dive into how and why I built this site to be grid aware.
 ---
 
 As mentioned in my [post about redesigning this site](/journal/site-redesign-spring-2026), one of the major goals in rebuilding was making it grid aware.
