@@ -3,49 +3,49 @@ title: Becoming grid aware
 draft: true
 ---
 
-As mentioned in my [post about redesigning this site](/journal/site-redesign-spring-2026), one of the major goals of rebuilding this site is making it grid aware.
+As mentioned in my [post about redesigning this site](/journal/site-redesign-spring-2026), one of the major goals in rebuilding was making it grid aware.
 
 There's an overview of the grid aware functionality on [the grid aware page](/grid-aware), but in this post I wanted to go into more detail about how it works and how I built it.
 
 ## What does grid aware mean?
 
-I've been enjoying learning about green software over the last few months. Obviously I feel passionate about reducing the impact of my work on the environment, but I've also found there are many interesting lessons on system design.
+I've been enjoying learning about green software over the last few months. I feel passionate about reducing the impact of my work on the environment, but I've also found there are many interesting lessons on system design.
 
-A grid aware system is pulled directly from the principles of green software. To be grid aware, the software needs to adapt its behaviour based on the how much carbon is being emitted from the electricity grid when run. Since (almost) all software is run on electricity from the grid, by using grid emissions we can infer the emissions for the software.
+A grid aware system is based on the principles of green software. Since (almost) all software is run on electricity from the grid, by using emissions from the grid we can infer the emissions from the software and attempt to reduce them. To be grid aware, the system needs to adapt its behaviour based on the how much carbon is being emitted from the grid when run.
 
-Grid aware websites adapt functionality of the frontend based on conditions of the user's electricity grid. The focus is on the frontend as there are well established principles around backend/server based grid aware software, I'd recommend the [Green Software Foundation's course](https://learn.greensoftware.foundation/carbon-awareness) if you want to learn more.
+Grid aware _websites_ adapt functionality of the frontend based on conditions of the user's electricity grid. The focus is on the frontend as there are well established principles around backend/server based grid aware software, I'd recommend the [Green Software Foundation's course](https://learn.greensoftware.foundation/carbon-awareness) if you want to learn more.
 
-There's a some prior art, in the [Branch magazine](https://branch.climateaction.tech/) from the Green Web Foundation. The GWF are also responsible for the [Grid-aware websites project](https://www.thegreenwebfoundation.org/tools/grid-aware-websites/), which directly inspired me to rebuild my site. I believe I first heard about this through the [core maintainer's - Fershad Irani - blog](https://fershad.com/writing/introducing-our-grid-aware-websites-project/), who's website also is grid aware.
+The [Branch magazine](https://branch.climateaction.tech/) from the Green Web Foundation is prior art, see the [full write up](https://branch.climateaction.tech/issues/issue-9/designing-a-grid-aware-branch/) for more. The GWF are also responsible for the [Grid-aware websites project](https://www.thegreenwebfoundation.org/tools/grid-aware-websites/), which directly inspired me to rebuild my site. I believe I first heard about this through the [core maintainer's blog](https://fershad.com/writing/introducing-our-grid-aware-websites-project/), who's website also is grid aware (and is well worth a read!)
 
 ## Searching for a carbon emissions API
 
-Determining the conditions of the grid is not an easy challenge, they are complex systems that are continually changing. To get data on grid carbon emissions, I needed an API that can estimate this on a reasonably real-time basis.
+Determining the conditions of the grid is not an easy challenge, they are complex systems that are continually changing. To get data on grid carbon emissions, I needed an API that can estimate emissions on a reasonably real-time basis.
 
 The grid-aware-websites project was built with the assumption that the Electricity Maps API could be used as a data provider, which - spoiler alert - is probably a good idea, as they're very well respected for real-time emissions data.
 
-Unfortunately, initially GWF team planned to use an Electricity Maps API endpoint that is very expensive for an individual and is limited to data from a single country, as [discussed in a GitHub ticket](https://github.com/thegreenwebfoundation/grid-aware-websites/issues/21).
+Unfortunately, initially project planned to use an Electricity Maps API endpoint that is very expensive for an individual and is limited to data from a single country, as [discussed in a GitHub ticket](https://github.com/thegreenwebfoundation/grid-aware-websites/issues/21).
 
 Because of this, I decided to look for alternative providers. I settled on [WattTime](https://watttime.org/) mostly because there's not many around! I'd heard of them some time ago thanks to their excellent explainers like [marginal](https://watttime.org/data-science/data-signals/marginal-co2/) and [average](https://watttime.org/data-science/data-signals/average-co2/) emissions.
 
-I built a full implementation using the WattTime API and had it working, serving pages from Astro. However, I ran into some significant issues with performance. WattTime's API has a relatively complex surface area, with three separate calls for authentication, identifying the electricity grid's region from the user's latitude/longitude and determining the carbon emissions for the region. Each of these calls adds latency and ultimately added up to a noticeable wait when loading.
+I built a full implementation using the WattTime API and had it working, serving pages from Astro. However, I ran into some significant issues with performance. WattTime's API has a relatively complex surface area, with three separate calls for authentication, identifying the electricity grid's region from the user's latitude/longitude and determining the carbon emissions for the region. Each of these calls adds latency and ultimately added up to a significant wait for page load.
 
-Adding caching definitely helped here but since the request pattern is likely to be spread geographically, most users would need at least two requests. At a few hundred milliseconds each, I felt that this wasn't workable so essentially abandoned this plan.
+Adding caching definitely helped but since the request pattern is likely to be spread geographically, most users would need at least two requests. At a few hundred milliseconds each, I felt that this wasn't workable so I had to abandon this plan.
 
-However, luckily the folks at GWF were doing what they'd promised and Electricity Maps agreed to create a new API for this purpose! Their [blog post goes into all the details](https://www.thegreenwebfoundation.org/news/a-new-api-for-grid-aware-websites-and-beyond/) but the new API immediately seemed like the solution to unblock this project for me. Only one request is needed for retrieving the carbon emissions data meaning the latency introduced is reduced to be acceptable (barring caveats discussed below).
+Luckily, the folks at the GWF had been working with Electricity Maps to create a new API for this purpose! Their [blog post goes into all the details](https://www.thegreenwebfoundation.org/news/a-new-api-for-grid-aware-websites-and-beyond/) but the new API immediately seemed like the solution to unblock this project for me. Only one request is needed for retrieving the carbon emissions data meaning the latency introduced is reduced to be acceptable (barring caveats discussed below).
 
 ## Architecture
 
 At a high level, the grid aware mode is structured around an Astro middleware that queries the Electricity Maps API, before injecting the response into the rendering layer.
 
-From there, the rendering layer treats this as any other variable using it determine whether behaviour should be enabled or not.
-
 ### Middleware
 
-Astro middlewares process each individual request and response to the site, which is ideal for grid aware mode as each request can come from a different grid and so behaviours need to adapt per-request. Because of this, middlewares are required to be run in Astro's server-rendering mode, so I've enabled that across the site by setting `output: 'server'` in the config.
+Astro middlewares process each individual request to the site, allowing shared functionality across routes. Middlewares are therefore required to be run in Astro's server-rendering mode, enabled across the site by setting `output: 'server'` in the config.
 
-First, the middleware checks if the grid aware mode has been disabled. This can either happen if a `grid-aware-disabled` query parameter is on the URL - allowing users to disable grid aware if wanted; or if an environment variable is set - allowing me to disable it in development.
+Each incoming request can come from a different grid running under different conditions, so behaviour needs to be modified per-request. This makes middleware the ideal choice, intercepting requests and injecting emissions data into responses.
 
-Next, to keep performance reasonable for users moving between pages on the site, the middleware checks if the user has a cookie containing cached carbon level data. Since the Electricity Maps API returns hourly data, the cookie has a TTL of 1 hour.
+First, the middleware checks if the grid aware mode has been disabled. This can either happen if a `grid-aware-disabled` query parameter is set - allowing users to disable grid aware if wanted; or if an environment variable is set - allowing me to disable it during development.
+
+Next, to keep performance reasonable for users moving between pages on the site, the middleware checks for a cookie containing cached carbon level data. Since the Electricity Maps API returns hourly data, the cookie has a TTL of 1 hour.
 
 If there's a cache miss, then the middleware combines with the [Netlify adapter](https://docs.astro.build/en/guides/integrations-guide/netlify/), where I'm currently hosting this site, to receive the request's geolocation as latitude/longitude coordinates:
 
@@ -58,6 +58,8 @@ export const onRequest = defineMiddleware(async (context, next) => {
   ...
 }
 ```
+
+These will be passed to the API request as we'll see shortly.
 
 The middleware is designed to be quite defensive, and will disable the grid aware mode if errors are encountered. I want the site to be resilient to problems in the grid aware system, as ultimately it is a nice-to-have.
 
@@ -81,7 +83,7 @@ const res = await fetch(
 )
 ```
 
-From this, we get back the `zone` - effectively the grid powering the location - and a `level`:
+From this, we get back the `zone` - effectively the grid powering the location - and a `high`/`moderate`/`low` `level`:
 
 ```json
 {
@@ -95,11 +97,11 @@ From this, we get back the `zone` - effectively the grid powering the location -
 }
 ```
 
-The `level` can be `high`, `medium` or `low`, with thresholds defined in the [API docs](https://app.electricitymaps.com/developer-hub/api/reference#carbon-intensity-level-latest). The integration extracts this value and passes it back to the middleware.
+The level thresholds defined in the [API docs](https://app.electricitymaps.com/developer-hub/api/reference#carbon-intensity-level-latest) and are based on difference from the average emissions for that grid over the last 10 days.
 
 ### Injection into the rendering layer
 
-Once the middleware receives the level data from the integration, it is set on Astro [`locals`](https://docs.astro.build/en/reference/api-reference/#locals), injecting it into the rendering layer. We'll see later that the frontend can now use it to modify behaviour:
+After receiving the level data, it is set on Astro [`locals`](https://docs.astro.build/en/reference/api-reference/#locals), injecting it into the rendering layer. We'll see later that the frontend can now use it to modify behaviour:
 
 ```ts
 context.locals.gridAwareCarbonIntensityLevel = gridAwareCarbonIntensityLevel
@@ -119,9 +121,9 @@ context.cookies.set(
 
 Although I've been directly inspired by Green Web Foundation's [grid-aware-websites project](https://github.com/thegreenwebfoundation/grid-aware-websites), there are some architectural differences.
 
-The key difference is that the grid-aware-websites project is explicitly targeted at pre-existing websites, and avoiding the need to rewrite a whole site to add grid aware support was a stated goal of the project, with support for Wordpress on the roadmap.
+The key difference is that the grid-aware-websites project is explicitly targeted at pre-existing websites. A stated goal was avoiding the need to rewrite a whole site to add grid aware support.
 
-My goals were to play around and learn from the grid aware pattern and so rewriting from scratch made sense. Because of this choice, my architecture optimises around control using the primary server instead of edge workers. In the long term, if grid aware becomes the norm for web architectures, control from the server is more direct and easy to reason about.
+My goals were to learn from the grid aware pattern and so rewriting from scratch made sense. Because of this choice, my architecture optimises for control via the primary server over edge workers. In the long term, if grid aware becomes the norm for web architectures, control from the server is more direct and easy to reason about.
 
 However, this has a major downside: because the primary server must resolve the carbon intensity data before rendering, site latency becomes dependent on the speed of the API response. The latency is more than I would like but acceptable. I have some ideas that I'll cover later that may help with this.
 
@@ -129,7 +131,7 @@ However, this has a major downside: because the primary server must resolve the 
 
 Once `locals.gridAwareCarbonIntensityLevel` has been set, the frontend can use it to make decisions about how to change behaviour.
 
-In all cases, I chose to only change behaviour of the site when intensity level is considered high. Based on my testing in the UK, it seems like high intensity only really kicks in during the evening. Given that my goal is for the site to behave as normal for most of the time, setting this as the bar seems reasonable.
+In all cases, I chose to only change behaviour when intensity level is considered high. Based on my testing in the UK, it seems like high intensity only really kicks in during the evening. Given that my goal is for the site to behave as normal for most of the time, setting this as the bar seems reasonable.
 
 ### CSS
 
@@ -161,7 +163,7 @@ This CSS property is then used to disable animations and view transitions using 
 }
 ```
 
-This was inspired by the [Obs.js demo site](https://csswizardry.com/Obs.js/demo/) which does the same when detecting that the user is low on battery. As well as the [Web Sustainability Guidelines](https://sustainablewebdesign.org/guidelines/2-12-ensure-animation-is-proportionate-and-easy-to-control/) which recommend reducing unnecessary animations.
+This was inspired by the [Obs.js demo site](https://csswizardry.com/Obs.js/demo/) which does the same when detecting that the user is low on battery. The [Web Sustainability Guidelines](https://sustainablewebdesign.org/guidelines/2-12-ensure-animation-is-proportionate-and-easy-to-control/) also recommend avoiding unnecessary animations.
 
 Separately, the "scramble in" animation in the header, built using Preact/JavaScript, also reads the intensity level and disables itself if intensity is high.
 
@@ -169,7 +171,7 @@ Separately, the "scramble in" animation in the header, built using Preact/JavaSc
 
 Images are the [biggest assets on the web](https://almanac.httparchive.org/en/2022/page-weight#fig-8) so avoiding loading, decoding and rendering them was one of the major goals for me.
 
-Astro already provides a number of useful tools via the built-in [`<Image>`](https://docs.astro.build/en/guides/images/#image-) component, including automatic lazy loading. I wanted to extend this component's functionality to make it grid aware. My `<GridAwareImage>` component reads the intensity level from locals, then uses this to decide whether to render a placeholder matching the size of the true image, or an Astro `<Image>`.
+Astro already provides a number of useful tools via the built-in [`<Image>`](https://docs.astro.build/en/guides/images/#image-) component, including automatic lazy loading. I wanted to extend this component's functionality to make it grid aware. My `<GridAwareImage>` component reads the intensity level from locals, then uses this to decide whether to render an alt-text placeholder matching the size of the true image, or an Astro `<Image>`:
 
 ```astro
 {
