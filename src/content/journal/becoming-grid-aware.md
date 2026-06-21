@@ -5,17 +5,17 @@ draft: true
 
 As mentioned in my [post about redesigning this site](/journal/site-redesign-spring-2026), one of the major goals in rebuilding was making it grid aware.
 
-There's an overview of the grid aware functionality on [the grid aware page](/grid-aware), but in this post I wanted to go into more detail about how it works and how I built it.
+There's an overview of the grid aware functionality on [the grid aware page](/grid-aware), but in this post I want to go into more detail about how it works and how I built it.
 
 ## What does grid aware mean?
 
 I've been enjoying learning about green software over the last few months. I feel passionate about reducing the impact of my work on the environment, but I've also found there are many interesting lessons on system design.
 
-A grid aware system is based on the principles of green software. Since (almost) all software is run on electricity from the grid, by using emissions from the grid we can infer the emissions from the software and attempt to reduce them. To be grid aware, the system needs to adapt its behaviour based on the how much carbon is being emitted from the grid when run.
+A grid aware system is based on the principles of green software. Since almost all software runs on grid electricity, we can use carbon intensity data from the grid to infer the emissions of the software. Then various strategies can be applied to try reduce emissions. To be grid aware, the system adapts its behaviour based on how much carbon is being emitted from the grid when run.
 
 Grid aware _websites_ adapt functionality of the frontend based on conditions of the user's electricity grid. The focus is on the frontend as there are well established principles around backend/server based grid aware software, I'd recommend the [Green Software Foundation's course](https://learn.greensoftware.foundation/carbon-awareness) if you want to learn more.
 
-The [Branch magazine](https://branch.climateaction.tech/) from the Green Web Foundation is prior art, see the [full write up](https://branch.climateaction.tech/issues/issue-9/designing-a-grid-aware-branch/) for more. The GWF are also responsible for the [Grid-aware websites project](https://www.thegreenwebfoundation.org/tools/grid-aware-websites/), which directly inspired me to rebuild my site. I believe I first heard about this through the [core maintainer's blog](https://fershad.com/writing/introducing-our-grid-aware-websites-project/), who's website also is grid aware (and is well worth a read!)
+The [Branch magazine](https://branch.climateaction.tech/) from the Green Web Foundation is prior art, see the [full write up](https://branch.climateaction.tech/issues/issue-9/designing-a-grid-aware-branch/) for more. The GWF are also responsible for the [Grid-aware websites project](https://www.thegreenwebfoundation.org/tools/grid-aware-websites/), which directly inspired me to rebuild my site. I believe I first heard about this through the [core maintainer's blog](https://fershad.com/writing/introducing-our-grid-aware-websites-project/), whose website is also grid aware (and is well worth a read!)
 
 ## Searching for a carbon emissions API
 
@@ -23,19 +23,19 @@ Determining the conditions of the grid is not an easy challenge, they are comple
 
 The grid-aware-websites project was built with the assumption that the Electricity Maps API could be used as a data provider, which - spoiler alert - is probably a good idea, as they're very well respected for real-time emissions data.
 
-Unfortunately, initially project planned to use an Electricity Maps API endpoint that is very expensive for an individual and is limited to data from a single country, as [discussed in a GitHub ticket](https://github.com/thegreenwebfoundation/grid-aware-websites/issues/21).
+Unfortunately, the project initially planned to use an Electricity Maps API endpoint that is very expensive for an individual and is limited to data from a single country, as [discussed in a GitHub ticket](https://github.com/thegreenwebfoundation/grid-aware-websites/issues/21).
 
 Because of this, I decided to look for alternative providers. I settled on [WattTime](https://watttime.org/) mostly because there's not many around! I'd heard of them some time ago thanks to their excellent explainers like [marginal](https://watttime.org/data-science/data-signals/marginal-co2/) and [average](https://watttime.org/data-science/data-signals/average-co2/) emissions.
 
-I built a full implementation using the WattTime API and had it working, serving pages from Astro. However, I ran into some significant issues with performance. WattTime's API has a relatively complex surface area, with three separate calls for authentication, identifying the electricity grid's region from the user's latitude/longitude and determining the carbon emissions for the region. Each of these calls adds latency and ultimately added up to a significant wait for page load.
+I built a full implementation using the WattTime API and had it working, serving pages from Astro. However, I ran into some significant issues with performance. WattTime's API has a relatively complex surface area, requiring three separate calls: one for authentication, one to identify the electricity grid's region from the user's latitude/longitude, and one to determine carbon emissions for that region. Each of these calls adds latency and ultimately added up to a significant wait for page load.
 
-Adding caching definitely helped but since the request pattern is likely to be spread geographically, most users would need at least two requests. At a few hundred milliseconds each, I felt that this wasn't workable so I had to abandon this plan.
+Adding caching definitely helped but since the request pattern is likely to be spread geographically, most users would need at least two requests. At a few hundred milliseconds each, the latency wasn't workable, so I abandoned this approach.
 
-Luckily, the folks at the GWF had been working with Electricity Maps to create a new API for this purpose! Their [blog post goes into all the details](https://www.thegreenwebfoundation.org/news/a-new-api-for-grid-aware-websites-and-beyond/) but the new API immediately seemed like the solution to unblock this project for me. Only one request is needed for retrieving the carbon emissions data meaning the latency introduced is reduced to be acceptable (barring caveats discussed below).
+Luckily, the folks at the GWF had been working with Electricity Maps to create a new API for this purpose! Their [blog post goes into all the details](https://www.thegreenwebfoundation.org/news/a-new-api-for-grid-aware-websites-and-beyond/) but the new API immediately seemed like the solution to unblock this project for me. Only one request is needed to retrieve carbon emissions data, bringing latency down to an acceptable level (barring caveats discussed below).
 
 ## Architecture
 
-At a high level, the grid aware mode is structured around an Astro middleware that queries the Electricity Maps API, before injecting the response into the rendering layer.
+At a high level, the grid aware mode is structured around an Astro middleware that queries the Electricity Maps API before injecting the response into the rendering layer.
 
 ### Middleware
 
@@ -45,7 +45,7 @@ Each incoming request can come from a different grid running under different con
 
 First, the middleware checks if the grid aware mode has been disabled. This can either happen if a `grid-aware-disabled` query parameter is set - allowing users to disable grid aware if wanted; or if an environment variable is set - allowing me to disable it during development.
 
-Next, to keep performance reasonable for users moving between pages on the site, the middleware checks for a cookie containing cached carbon level data. Since the Electricity Maps API returns hourly data, the cookie has a TTL of 1 hour.
+Next, to keep performance reasonable for users moving between pages on the site, the middleware checks for a cookie containing cached carbon intensity data. Since the Electricity Maps API returns hourly data, the cookie has a TTL of 1 hour.
 
 If there's a cache miss, then the middleware combines with the [Netlify adapter](https://docs.astro.build/en/guides/integrations-guide/netlify/), where I'm currently hosting this site, to receive the request's geolocation as latitude/longitude coordinates:
 
@@ -123,7 +123,7 @@ Although I've been directly inspired by Green Web Foundation's [grid-aware-websi
 
 The key difference is that the grid-aware-websites project is explicitly targeted at pre-existing websites. A stated goal was avoiding the need to rewrite a whole site to add grid aware support.
 
-My goals were to learn from the grid aware pattern and so rewriting from scratch made sense. Because of this choice, my architecture optimises for control via the primary server over edge workers. In the long term, if grid aware becomes the norm for web architectures, control from the server is more direct and easy to reason about.
+My goal was to learn from the grid aware pattern, so rewriting from scratch made sense. Because of this choice, my architecture optimises for control via the primary server over edge workers. In the long term, if grid aware becomes the norm for web architectures, control from the server is more direct and easy to reason about.
 
 However, this has a major downside: because the primary server must resolve the carbon intensity data before rendering, site latency becomes dependent on the speed of the API response. The latency is more than I would like but acceptable. I have some ideas that I'll cover later that may help with this.
 
@@ -190,6 +190,6 @@ Astro already provides a number of useful tools via the built-in [`<Image>`](htt
 
 One of the major downsides of this architecture is that the API request blocks rendering of the page while in-flight. This results in a slower time-to-first-byte, my testing with [Calibre](https://calibreapp.com/) found that it was on the order of 1 second. This impacts perceived performance as is a noticeable delay between opening the site and something appearing on screen.
 
-This is a tricky problem, as in order to render parts of the site, the components need to have grid intensity level, which is impossible until the API request completes. Providing a default value to render while the request is in-flight is also non-optimal since it would lead to a "flash of wrong behaviour", similar to [flash of unstyled text (FOUT)](https://fonts.google.com/knowledge/glossary/fout). Worse, since image loading is dependent on the intensity level, providing a default value could lead to an image request being made, only to be made redundant later, defeating the purpose of the grid aware site.
+This is a tricky problem, as in order to render parts of the site, the components need to have grid intensity level, which is impossible until the API request completes. Providing a default value while the request is in-flight is non-optimal, since it would lead to a "flash of wrong behaviour", similar to [flash of unstyled text (FOUT)](https://fonts.google.com/knowledge/glossary/fout). Worse, since image loading is dependent on the intensity level, providing a default value could lead to an image request being sent only to become redundant soon after, defeating the purpose of the grid aware site.
 
 To combat this and avoiding in-flight states, I'd like to investigate HTML streaming, allowing parts of the page that are not dependent on the intensity level value to render while other parts of the page have to wait. I only recently learned about a [streaming API in Astro](https://docs.astro.build/en/recipes/streaming-improve-page-performance/) so I'm hopeful this can improve performance.
