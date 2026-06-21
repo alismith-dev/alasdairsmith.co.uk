@@ -84,6 +84,7 @@ html {
   font-family: var(--fnt-monospace);
   background-color: var(--clr-background);
   color: var(--clr-body);
+  line-height: 1.55;
 }
 
 /* Remove body padding, to use full-bleed layout instead */
@@ -129,10 +130,13 @@ pre,
 code,
 kbd,
 samp {
-  background-color: var(--clr-body);
-  color: var(--clr-background);
   border-radius: 0.25rem;
-  border: 2px solid var(--clr-primary);
+  border: 2px solid color-mix(in srgb, var(--clr-primary), transparent 33%);
+}
+
+/* Astro applies its own code block styles, so avoid overwriting these */
+pre > code {
+  border: none;
 }
 
 code,
