@@ -193,3 +193,7 @@ One of the major downsides of this architecture is that the API request blocks r
 This is a tricky problem, as in order to render parts of the site, the components need to have grid intensity level, which is impossible until the API request completes. Providing a default value while the request is in-flight is non-optimal, since it would lead to a "flash of wrong behaviour", similar to [flash of unstyled text (FOUT)](https://fonts.google.com/knowledge/glossary/fout). Worse, since image loading is dependent on the intensity level, providing a default value could lead to an image request being sent only to become redundant soon after, defeating the purpose of the grid aware site.
 
 To combat this and avoiding in-flight states, I'd like to investigate HTML streaming, allowing parts of the page that are not dependent on the intensity level value to render while other parts of the page have to wait. I only recently learned about a [streaming API in Astro](https://docs.astro.build/en/recipes/streaming-improve-page-performance/) so I'm hopeful this can improve performance.
+
+## Wrapping up
+
+I really enjoyed the rebuild and learned a lot along the way about the grid aware pattern. Although there are tradeoffs, I can see a future where it becomes more widespread across the web.
