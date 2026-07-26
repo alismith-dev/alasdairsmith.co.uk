@@ -19,7 +19,7 @@
     "@astrojs/preact": "^4.1.3",
     "@astrojs/rss": "^4.0.18",
     "astro": "^5.16.6",
-    "preact": "^10.28.1",
+    "preact": "^10.29.7",
     "sanitize-html": "^2.17.4",
     "tiny-invariant": "^1.3.3",
     "typescript": "^5.9.3"
